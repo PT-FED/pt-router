@@ -321,7 +321,7 @@
      */
     Router.prototype.destroy = function(){
         // 移除监听
-        _Events.removeHashChangeListener(window, this._hashChangeHandler)
+        _Events.removeHashChangeListener(window, this._hashChangeHandler);
     };
 
     return Router;
