@@ -1,4 +1,4 @@
-# router [![Build Status](https://travis-ci.org/PT-FED/router.svg?branch=master)]
+# router [![Build Status](https://travis-ci.org/PT-FED/router.svg?branch=master)](https://travis-ci.org/PT-FED/router)
 路由。此模块目前仅供PTFED内部使用
 
 ## 功能
