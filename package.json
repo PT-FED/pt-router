@@ -2,16 +2,23 @@
   "name": "router",
   "version": "1.0.0",
   "description": "",
-  "main": "webpack.config.js",
-  "directories": {
-    "test": "test"
-  },
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
+  "main": "dist/router.min.js",
   "author": "ligang",
   "license": "ISC",
-  "dependencies": {
+  "keywords": [
+    "router",
+    "router.js"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PT-FED/router"
+  },
+  "devDependencies": {
+    "jshint": "^2.9.3",
     "webpack": "^1.13.2"
+  },
+  "scripts": {
+    "lint": "jshint src/router.js",
+    "test": "npm run lint"
   }
 }
