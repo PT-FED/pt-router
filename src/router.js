@@ -1,20 +1,24 @@
 /**
- * Router
- * Created by ligang on 16/9/27.
- * 1. IE 9+
+ * Copyright (c) 2016/09/27 ligang
+ * https://github.com/PT-FED/router
+ * 版本: 1.0.0
+ * 描述: hash路由,兼容IE9+
  */
 (function(global, name, factory){
     "use strict";
 
     if(typeof exports === 'object' && typeof module !== 'undefined'){
         module.exports = factory();
-    }else if(typeof define === 'function' && define.amd ){
+    }else if(typeof define === 'function' && (define.amd || define.cmd)){
         define(factory);
     }else{
         global[name] = factory();
     }
-}(typeof window !== "undefined" ? window : this, "Router", function(){
+}(window || this, "Router", function(){
     "use strict";
+
+    // 常量
+    var VERSION = "1.0.0";
 
     /**
      * 内部工具类
@@ -109,6 +113,11 @@
     };
 
     /**
+     * 当前版本
+     */
+    Router.prototype.version = VERSION;
+
+    /**
      * 用户自定义错误信息
      * @param httpCode
      * @param callback
@@ -116,10 +125,10 @@
      */
     Router.prototype.errors = function(httpCode, callback) {
         if(isNaN(httpCode)) {
-            throw new Error('Invalid code for routes error handling');
+            throw new Error('不合理的错误码,Router不能处理!');
         }
         if(!(callback instanceof Function)){
-            throw new Error('Invalid callback for routes error handling');
+            throw new Error('不合理的callback,Router不能处理!');
         }
         httpCode = '_' + httpCode;
         this._errors[httpCode] = callback;
@@ -155,14 +164,44 @@
     };
 
     /**
+     * 拦截路由
+     * @param befores
+     * @param currentBefore
+     * @param fragmentUrl
+     * @param url
+     * @param matchedIndexes
+     * @private
+     */
+    Router.prototype._routeBefores = function(befores, currentBefore, fragmentUrl, url,  matchedIndexes){
+        var next;
+        if(befores.length > 0){
+            var nextBefore = befores.shift();
+            next = function(errorCode){
+                if(errorCode)
+                    return this._throwsRouteError(errorCode || 500, fragmentUrl);
+                this._routeBefores(befores, nextBefore, fragmentUrl, url, matchedIndexes);
+            }.bind(this);
+        }else{
+            next = function(errorCode){
+                if(errorCode)
+                    return this._throwsRouteError(errorCode || 500, fragmentUrl);
+                this._followRoute(fragmentUrl, url, matchedIndexes);
+            }.bind(this);
+        }
+        currentBefore(this._buildRequestObject(fragmentUrl, null, null, true), next);
+    };
+
+    /**
      * 路由处理程序(可能有多个符合)
-     * @param hash
+     * @param fragmentUrl
      * @private
      */
     Router.prototype._route = function(fragmentUrl){
         var matchedIndexes = [],
             befores = this._befores.slice(),    // 深复制
-            hash;
+            hash,
+            routes = this._routes;
+
         var url = fragmentUrl;
         if(url.length === 0){
             return true;
@@ -170,7 +209,6 @@
         url = url.replace(_Utils.LEADING_BACKSLASHES_MATCH, '');                // "#/users/lg/?a=1/" ==> "#/users/lg/?a=1"
         hash = url.split("?")[0].replace(_Utils.LEADING_BACKSLASHES_MATCH, ''); // "#/users/lg/?a=1" ==> "#/users/lg"
 
-        var routes = this._routes;
         for(var i = 0, len = routes.length; i < len; i++){
             if(routes[i].path.test(hash)){
                 matchedIndexes.push(i);     // 存储下标
@@ -188,27 +226,6 @@
         }else{
             this._throwsRouteError(404, fragmentUrl);
         }
-    };
-
-
-    Router.prototype._routeBefores = function(befores, currentBefore, fragmentUrl, url,  matchedIndexes){
-        var next;
-        if(befores.length > 0){
-            var nextBefore = befores.shift();
-            next = function(errorCode, errorMsg){
-                if(errorMsg)
-                    return this._throwsRouteError(errorCode || 500, fragmentUrl);
-                this._routeBefores(befores, nextBefore, fragmentUrl, url, matchedIndexes);
-            }.bind(this);
-        }else{
-            next = function(errorCode, errorMsg){
-                if(errorMsg)
-                    return this._throwsRouteError(errorCode || 500, fragmentUrl);
-                this._followRoute(fragmentUrl, url, matchedIndexes);
-            }.bind(this);
-        }
-        // before(request, next);
-        currentBefore(this._buildRequestObject(fragmentUrl, null, null, true), next);
     };
 
     /**
@@ -242,16 +259,13 @@
         }
         // 判断是否存在符合要求的下一个路由
         var hasNext = (matchedIndexes.length !== 0);
-        var next = (
-            function(nextFragmentUrl, nextUrl, nextMatchIndexes, hasNext){
-                return function(hasNext){
-                    if(!hasNext){
-                        return this._throwsRouteError( 500, fragmentUrl);
-                    }
-                    this._followRoute(nextFragmentUrl, nextUrl, nextMatchIndexes);
-                }.bind(this, hasNext);
-            }.bind(this)(fragmentUrl, url, matchedIndexes, hasNext)
-        );
+        var next = function(errorCode){
+            if(!hasNext || errorCode){  // 不存在下个路由,或存在错误码
+                return this._throwsRouteError(500, fragmentUrl);
+            }
+            this._followRoute(fragmentUrl, url, matchedIndexes);
+        }.bind(this);
+
         // 构建request对象
         request = this._buildRequestObject(fragmentUrl, params, splat, hasNext);
         route.routeAction(request, next);
@@ -275,6 +289,16 @@
             request.query[key] = value;
         });
         return request;
+    };
+
+    /**
+     * 路由匹配前执行一些操作
+     * @param callback
+     * @returns {Router}
+     */
+    Router.prototype.before = function(callback) {
+        this._befores.push(callback);
+        return this;
     };
 
     /**
@@ -304,16 +328,6 @@
             'routeAction' : callback
         });
         return this;       // 支持链式调用
-    };
-
-    /**
-     * 路由匹配前执行一些操作
-     * @param callback
-     * @returns {Router}
-     */
-    Router.prototype.before = function(callback) {
-        this._befores.push(callback);
-        return this;
     };
 
     /**

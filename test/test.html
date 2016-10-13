@@ -15,14 +15,13 @@
         if( userIsLogged() === true)
             next();
         else
-            next( new Error('User not logged'), 403);
+            next(403);
     });
 
     router.add('#/users/', function(req,next){
         console.log("#/users/");
         console.log(req);
-    });
-    router.add('#/users/:username', function(req,next){
+    }).add('#/users/:username', function(req,next){
         var username = req.params.username;
         console.log(req.get("username"));
         console.log(req.get("uid", 18));
@@ -30,18 +29,16 @@
         if(username == "lg"){
             next(); // 被下一个再处理一次
         }
-    });
-    router.add('#/users/*', function(req,next){
+    }).add('#/users/*', function(req,next){
         console.log("#/users/*");
         console.log(req);
-    });
-    router.add('#/users/**', function(req,next){
+    }).add('#/users/**', function(req,next){
         console.log(req);
     });
+
     router.errors(403, function( err, href){
         alert('没有权限' + href );
-    });
-    router.errors(404, function( err, href){
+    }).errors(404, function( err, href){
         alert('Page not found!' + href );
     });
 

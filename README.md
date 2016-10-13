@@ -37,6 +37,55 @@ router.add('#/users', function(req,next){
     /*do something*/
 });
 ```
+Router实例参数说明:
+```javascript
+Router = {
+    // 配置项
+    _options: {
+        ignorecase: true
+    },
+    // 路由触发前执行,通过router.before()方法进行配置
+    _befores: [function(){}, function(){}],
+    // 路由项,
+    _routes: [{
+        paramNames: [], // 路由参数
+        path: "", // 正则路由地址
+        routeAction: function(req, next){} // 路由行为函数
+    },{}],
+    // 错误处理,可通过router.errors()方法进行配置,覆盖默认处理
+    _errors: {
+        "_": function(httpcode, url){},
+        "_404": function(httpcode, url){},
+        "_500": function(httpcode, url){},
+    }
+}
+```
+Request实例参数说明:
+```javascript
+Request = {
+    params: {},     // 路由参数
+    query: {},      // 查询参数
+    sqlat: {},      // 路由参数后路径
+    hasNext: true,  // 是否存在下个路由
+    href: ""        // 当前hash值
+}
+```
+next()方法:
+```javascript
+router.before(function(req,next){
+    userIsLogged() ? next() : next(403);
+};
+```
+get()方法:
+```javascript
+router.add('#/users/:username', function(req,next){
+    console.log(req.get("username"));   // 即可获取路径参数(支持默认值)
+    console.log(req.get("uid", 18));    // 又可获取查询参数(支持默认值)
+    if(req.params.username == "lg"){
+        next(); // 被下一个再处理一次
+    }
+};
+```
 
 ## 作者
 李刚
