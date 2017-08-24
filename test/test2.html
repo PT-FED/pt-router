@@ -3,24 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <title>测试</title>
-    <script src="../src/router.js" charset="UTF-8"></script>
+    <script src="../src/router_2.js" charset="UTF-8"></script>
 </head>
 <body>
 
 <p><a href="#/users">#/users</a></p>
 <p><a href="#/users/lg">#/users/lg</a></p>
-<p><a href="#/users/lg?uid=1">#/users/lg?uid=1</a></p>
-<p><a href="javascript:;" onclick="router.redirect('#/users/lg/26?uid=3')">redirect('#/users/lg/26?uid=1')</a></p>
+<p><a href="#/users/lg?uid=1">#/users/lg?uid=2</a></p>
+<p><a href="javascript:;" onclick="router.redirect('#/users/lg/26?uid=3')">redirect('#/users/lg/26?uid=2')</a></p>
 
 <script>
     var options = {ignorecase: true};
     var router = new Router(options);
 
     router.before(function(req,next){
+        console.log("before1");
         if( userIsLogged() === true)
             next();
         else
             next(403);
+    }).before(function(req,next){
+        console.log("before2");
+        next();
     });
 
     router.add('#/users/', function(req,next){

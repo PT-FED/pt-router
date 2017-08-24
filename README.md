@@ -1,6 +1,17 @@
 # router [![Build Status](https://travis-ci.org/PT-FED/router.svg?branch=master)](https://travis-ci.org/PT-FED/router)
 路由。此模块目前仅供PTFED内部使用
 
+1. 获取指定路径html内容,异步!!!
+2. 直接改变hash值 ==> 反向的 (可先抓取地址)
+3. 嵌套 view
+4. 选择器 querySelectorAll
+5. 抓取地址 封装成指定路由 (同时可以获取对应页面内容)
+6. 正则匹配地址
+7. a标签click事件的绑定时机 ==> 如果有所有配置信息,可以只通过路由变化实现
+8.
+
+
+
 ## 功能
 - hash路由
 - 获取路径或查询参数
@@ -21,6 +32,7 @@ var options = {ignorecase: true}
 var router = new Router(options);
 ```
 有效的选项:
+
 1. `ignorecase`:忽略大小写,默认为true
 
 ### 使用
@@ -65,7 +77,7 @@ Request实例参数说明:
 Request = {
     params: {},     // 路由参数
     query: {},      // 查询参数
-    sqlat: {},      // 路由参数后路径
+    sqlat: [],      // 路由参数后路径
     hasNext: true,  // 是否存在下个路由
     href: ""        // 当前hash值
 }
@@ -86,6 +98,8 @@ router.add('#/users/:username', function(req,next){
     }
 };
 ```
+redirect()方法:
+
 
 ## 作者
 李刚

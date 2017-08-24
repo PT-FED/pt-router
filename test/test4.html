@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <script src="../src/router_4.js" charset="UTF-8"></script>
+</head>
+<body>
+
+<p><a href="#/users">#/users</a></p>
+<p><a href="#/users/lg">#/users/lg</a></p>
+<p><a href="#/users/lg?uid=1">#/users/lg?uid=1</a></p>
+<p><a href="javascript:;" onclick="router.redirect('#/users/lg/26?uid=3')">redirect('#/users/lg/26?uid=3')</a></p>
+
+<!-- 容器 -->
+<div id="content"></div>
+
+<script>
+    var options = {ignorecase: true};
+    var router = new Router(options);
+
+    router.before(function(req,next){
+        console.log("before1");
+        if(true)
+            next();
+        else
+            next(403);
+    }).before(function(req,next){
+        console.log("before2");
+        next();
+    });
+
+    router.state('#/users/', {
+        template: "<p>啦啦</p>",
+        target: "#content",
+        action: function(req, next) {
+            console.log("#/users/");
+            console.log(req);
+        }
+    }).state('#/users/:username', {
+        templateUrl: "./a.html",
+        target: "#content",
+        action: function(req, next) {
+            console.log("#/users/:username");
+            console.log(req);
+        }
+    }).state('#/users/*', {
+        templateUrl: "./b.html",
+        target: "#content",
+        action: function(req, next){
+            console.log("#/users/*");
+            console.log(req);
+        }
+    }).state('#/users/**', {
+        template: "<p>哈哈</p><p>通配符**</p>",
+        target: "#content",
+        action: function(req, next){
+            console.log(req);
+        }
+    });
+
+    router.errors(403, function( err, href){
+        alert('没有权限' + href );
+    }).errors(404, function( err, href){
+        alert('Page not found!' + href );
+    });
+</script>
+</body>
+</html>

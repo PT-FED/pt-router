@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>History</title>
+</head>
+<body>
+    <p><a href="javascript:;" data-url="/a">a</a></p>
+    <p><a href="javascript:;" data-url="/b">b</a></p>
+    <p><a href="javascript:;" data-url="/c">c</a></p>
+
+    <div id="content">
+        index
+    </div>
+
+
+    <script>
+        var aDom = document.querySelectorAll("a"),
+            contentDom = document.getElementById("content");
+
+        var currentState = {
+            url: document.url,
+            title: document.title,
+            html: contentDom.innerHTML
+        };
+
+        document.addEventListener("click", function(event){
+            if(event.target.hasAttribute("data-url")){
+                var url = event.target.getAttribute("data-url");
+                var state = {
+                    url: url,
+                    title: document.title,
+                    html: event.target.innerHTML
+                };
+                contentDom.innerHTML = event.target.innerHTML;
+                history.pushState(state, null, url);
+            }
+        });
+
+
+
+
+        window.addEventListener("popstate", function(event){
+            if(event && event.state){
+                document.title = event.state.title;
+                contentDom.innerHTML = event.state.html;
+            }else{
+                document.title = currentState.title;
+                contentDom.innerHTML = currentState.html;
+            }
+        });
+    </script>
+</body>
+</html>

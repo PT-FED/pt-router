@@ -58,6 +58,30 @@
         getURLHash: function(url){
             var hashIndex = url.indexOf('#');
             return hashIndex >= 0 ? url.substring(hashIndex) : '#/';
+        },
+        /**
+         * 去除URL尾反斜杠
+         * @param url
+         * @returns {string|XML|void}
+         */
+        removeTrailingSlash: function(url){
+            return url.replace(_Utils.LEADING_BACKSLASHES_MATCH, '');
+        },
+        getHtmlContent: function(url, callback){
+            if(!url) return callback(undefined);
+            var xhr = new XMLHttpRequest();
+            xhr.onreadystatechange = function(event){
+                if (xhr.readyState == 4){
+                    if ((xhr.status >= 200 && xhr.status < 300) || xhr.status == 304){
+                        callback(xhr.responseText);
+                    } else {
+                        console.error("Request was unsuccessful: " + xhr.status);
+                        callback(undefined);
+                    }
+                }
+            };
+            xhr.open("get", url, true);
+            xhr.send(null);
         }
     };
 
@@ -104,7 +128,7 @@
      */
     var Router = function(options){
         this._options = _Utils.extend({ignorecase: true}, options || {});  // 默认忽略大小写
-        this._routes = [];
+        this._states = [];
         this._befores = [];
         this._errors = {
             '_': function(httpCode, url) {
@@ -139,8 +163,7 @@
         if(!(callback instanceof Function)){
             throw new Error('不合理的callback,Router不能处理!');
         }
-        httpCode = '_' + httpCode;
-        this._errors[httpCode] = callback;
+        this._errors['_' + httpCode] = callback;
         return this;
     };
 
@@ -156,7 +179,7 @@
         if(this._errors['_'+httpCode] instanceof Function)
             this._errors['_'+httpCode](httpCode, url);
         else{
-            this._errors._(httpCode, url);
+            this._errors._(httpCode, url);  // 兼容处理
         }
         return false;
     };
@@ -172,23 +195,60 @@
         return true;
     };
 
-    /**
-     * 拦截路由
-     * @param befores
-     * @param currentBefore
-     * @param fragmentUrl
-     * @param url
-     * @param matchedIndexes
-     * @private
-     */
-    Router.prototype._routeBefores = function(befores, currentBefore, fragmentUrl, url,  matchedIndexes){
-        var next;
-        if(befores.length > 0){
-            var nextBefore = befores.shift();
+    // 构建request对象
+    Router.prototype._buildRequestObject = function(fragmentUrl, params, splat, hasNext){
+        var request = new Request(fragmentUrl);
+        request.params = params || {};
+        request.splat = splat || {};
+        request.hasNext = hasNext;
+        // 获取查询对象
+        fragmentUrl.replace(/([^?&=]+)=([^&]+)/g, function(full, key, value){
+            request.query[key] = value;
+        });
+        return request;
+    };
+
+    // 解构Request
+    Router.prototype._resolveRequest = function(fragmentUrl, route){
+        if(!route){
+            return this._throwsRouteError(500);
+        }
+
+        var request = {
+            params: {},     // 路由参数
+            query: {},      // 查询参数
+            splat: [],      // 路由参数后路径
+            hasNext: true,  // 是否存在下个路由
+            href: fragmentUrl        // 当前hash值
+        };
+
+        var fragmentUrlSlash = _Utils.removeTrailingSlash(fragmentUrl); // "#/users/lg/?a=1/" ==> "#/users/lg/?a=1"
+        // 获取路径参数
+        var matchResult = fragmentUrlSlash.match(route.path);
+        matchResult ? matchResult.shift() : matchResult = [];
+        for(var i = 0, len = route.paramNames.length; i < len; i++) {
+            request.params[route.paramNames[i]] = matchResult.shift();
+        }
+        // 存在未被匹配的路径项,添加到splat中
+        for(var j = 0; j< matchResult.length; j++){
+            request.splat.push(matchResult.shift());
+        }
+        // 获取查询对象
+        fragmentUrl.replace(/([^?&=]+)=([^&]+)/g, function(full, key, value){
+            request.query[key] = value;
+        });
+        return request;
+    };
+
+    // 拦截路由
+    Router.prototype._routeBefores = function(currentBefores, fragmentUrl, url,  matchedIndexes){
+        var next,
+            beforeAction = currentBefores.shift();   // currentBefores.length > 0
+        if(currentBefores.length > 0){
             next = function(errorCode){
                 if(errorCode)
                     return this._throwsRouteError(errorCode || 500, fragmentUrl);
-                this._routeBefores(befores, nextBefore, fragmentUrl, url, matchedIndexes);
+                this._routeBefores(currentBefores, fragmentUrl, url, matchedIndexes);
             }.bind(this);
         }else{
             next = function(errorCode){
@@ -197,19 +257,15 @@
                 this._followRoute(fragmentUrl, url, matchedIndexes);
             }.bind(this);
         }
-        currentBefore(this._buildRequestObject(fragmentUrl, null, null, true), next);
+        beforeAction(this._buildRequestObject(fragmentUrl, null, null, true), next);
     };
 
-    /**
-     * 路由处理程序(可能有多个符合)
-     * @param fragmentUrl
-     * @private
-     */
+    // 获取匹配的路由地址(可能多个)
     Router.prototype._route = function(fragmentUrl){
         var matchedIndexes = [],
             befores = this._befores.slice(),    // 深复制
             hash,
-            routes = this._routes;
+            routes = this._states;
 
         var url = fragmentUrl;
         if(url.length === 0){
@@ -227,8 +283,7 @@
         // 存在匹配的路由
         if(matchedIndexes.length > 0){
             if(befores.length > 0){
-                var currentBefore = befores.shift();
-                this._routeBefores(befores, currentBefore, fragmentUrl, url,  matchedIndexes);
+                this._routeBefores(befores, fragmentUrl, url,  matchedIndexes);
             }else{
                 this._followRoute(fragmentUrl, url,  matchedIndexes);
             }
@@ -237,35 +292,14 @@
         }
     };
 
-    /**
-     *
-     * @param fragmentUrl
-     * @param url
-     * @param matchedIndexes  ["1", "3"]
-     * @private
-     */
+    // 针对指定路由进行处理
     Router.prototype._followRoute = function(fragmentUrl, url, matchedIndexes){
         var index = matchedIndexes.shift(),  // 获取第一个匹配index
-            route = this._routes[index],
-            match = url.match(route.path),  // ["#/users/lg?uid=211", "lg"]
-            request,
-            params = {},
-            splat = [];
+            state = this._states[index];
 
-        if(!route){
-            return this._throwsRouteError(500, fragmentUrl);
-        }
-        // 获取路径参数
-        for(var i = 0, len = route.paramNames.length; i < len; i++) {
-            params[route.paramNames[i]] = match[i + 1];
-        }
-        i = i+1;
-        // 存在未被匹配的路径项,添加到splat中
-        if(match && i < match.length){
-            for(var j = i;j< match.length;j++){
-                splat.push(match[j]);
-            }
-        }
+        // 解构Request对象
+        var requestObj = this._resolveRequest(fragmentUrl, this._states[index]);
+
         // 判断是否存在符合要求的下一个路由
         var hasNext = (matchedIndexes.length !== 0);
         var next = function(errorCode){
@@ -276,82 +310,67 @@
         }.bind(this);
 
         // 构建request对象
-        request = this._buildRequestObject(fragmentUrl, params, splat, hasNext);
-        route.routeAction(request, next);
+        var targetDomAry = document.querySelectorAll(state.target);
+        for(var i = 0, len = targetDomAry.length; i < len; i++){
+            targetDomAry[i].innerHTML = state.templateContent;
+        }
+        state.routeAction(this._buildRequestObject(fragmentUrl, requestObj.params, requestObj.splat, hasNext), next);
     };
 
-    /**
-     * 构建request对象
-     * @param fragmentUrl
-     * @param params
-     * @param splat
-     * @param hasNext
-     * @private
-     */
-    Router.prototype._buildRequestObject = function(fragmentUrl, params, splat, hasNext){
-        var request = new Request(fragmentUrl);
-        request.params = params || {};
-        request.splat = splat || {};
-        request.hasNext = hasNext;
-        // 获取查询对象
-        fragmentUrl.replace(/([^?&=]+)=([^&]+)/g, function(full, key, value){
-            request.query[key] = value;
+    // 解构Route
+    Router.prototype._resolveState = function(path, stateObj, callback){
+        var that = this;
+        return _Utils.getHtmlContent(stateObj.templateUrl, function(content){
+            var templateContent = content || stateObj.template,
+                match,
+                state = {
+                    "originalPath": path,
+                    "state": stateObj,
+                    "path": "",
+                    "paramNames": [],
+                    "target": stateObj.target,
+                    "routeAction": stateObj.action,
+                    "templateContent": templateContent
+                };
+
+            if(typeof path === "string"){
+                // 移除最后的"/"
+                path = _Utils.removeTrailingSlash(path);
+                // 提取参数 '#/users/:username' ==> username
+                while((match = _Utils.PATH_NAME_MATCHER.exec(path)) !== null){
+                    state.paramNames.push(match[1]);
+                }
+                state.path = new RegExp(path.replace(_Utils.PATH_NAME_MATCHER, _Utils.PATH_REPLACER)      // "#/users/:username" ==> "#/users/([^/\?]+)"
+                        .replace(_Utils.PATH_EVERY_MATCHER, _Utils.PATH_EVERY_REPLACER)
+                        .replace(_Utils.PATH_EVERY_GLOBAL_MATCHER, _Utils.PATH_EVERY_GLOBAL_REPLACER) + "(?:\\?.+)?$",
+                    that._options.ignorecase ? "i" : "");
+            }
+            return callback(state);
         });
-        return request;
     };
 
-    /**
-     * 路由匹配前执行一些操作
-     * @param callback
-     * @returns {Router}
-     */
+    // 添加路由
+    Router.prototype.state = function(path, stateObj){
+        var that = this;
+        that._resolveState(path, stateObj, function(state){
+            that._states.push(state);
+        });
+        return that;    // 上述方法有可能是异步的
+    };
+
+    // 路由匹配前执行一些操作
     Router.prototype.before = function(callback) {
         this._befores.push(callback);
         return this;
     };
 
-    /**
-     * 添加路由
-     * @param path        路由地址
-     * @param callback    回到函数
-     * @public
-     */
-    Router.prototype.add = function(path, callback){
-        var match,
-            paramNames = [];
-        if(typeof path === "string"){
-            // 移除最后的"/"
-            path = path.replace(_Utils.LEADING_BACKSLASHES_MATCH, "");
-            // 提取参数 '#/users/:username' ==> username
-            while((match = _Utils.PATH_NAME_MATCHER.exec(path)) !== null){
-                paramNames.push(match[1]);
-            }
-            path = new RegExp(path.replace(_Utils.PATH_NAME_MATCHER, _Utils.PATH_REPLACER)      // "#/users/:username" ==> "#/users/([^/\?]+)"
-                    .replace(_Utils.PATH_EVERY_MATCHER, _Utils.PATH_EVERY_REPLACER)
-                    .replace(_Utils.PATH_EVERY_GLOBAL_MATCHER, _Utils.PATH_EVERY_GLOBAL_REPLACER) + "(?:\\?.+)?$",
-                this._options.ignorecase ? "i" : "");
-        }
-        this._routes.push({
-            'path' : path,
-            'paramNames' : paramNames,
-            'routeAction' : callback
-        });
-        return this;       // 支持链式调用
-    };
-
-    /**
-     * 销毁路由
-     */
+    // 销毁路由
     Router.prototype.destroy = function(){
         // 移除监听
         _Events.removeHashChangeListener(window, this._hashChangeHandler);
     };
 
-    /**
-     * 重定向
-     * @param url 重定向地址
-     * @returns {Router}
-     */
+    // 重定向
     Router.prototype.redirect = function(url){
         // location.href = url;
         window.history.pushState(null, "", url);

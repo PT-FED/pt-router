@@ -139,8 +139,7 @@
         if(!(callback instanceof Function)){
             throw new Error('不合理的callback,Router不能处理!');
         }
-        httpCode = '_' + httpCode;
-        this._errors[httpCode] = callback;
+        this._errors['_' + httpCode] = callback;
         return this;
     };
 
@@ -156,7 +155,7 @@
         if(this._errors['_'+httpCode] instanceof Function)
             this._errors['_'+httpCode](httpCode, url);
         else{
-            this._errors._(httpCode, url);
+            this._errors._(httpCode, url);  // 兼容处理
         }
         return false;
     };
@@ -174,21 +173,20 @@
 
     /**
      * 拦截路由
-     * @param befores
-     * @param currentBefore
+     * @param currentBefores
      * @param fragmentUrl
      * @param url
      * @param matchedIndexes
      * @private
      */
-    Router.prototype._routeBefores = function(befores, currentBefore, fragmentUrl, url,  matchedIndexes){
-        var next;
-        if(befores.length > 0){
-            var nextBefore = befores.shift();
+    Router.prototype._routeBefores = function(currentBefores, fragmentUrl, url,  matchedIndexes){
+        var next,
+            beforeAction = currentBefores.shift();   // currentBefores.length > 0
+        if(currentBefores.length > 0){
             next = function(errorCode){
                 if(errorCode)
                     return this._throwsRouteError(errorCode || 500, fragmentUrl);
-                this._routeBefores(befores, nextBefore, fragmentUrl, url, matchedIndexes);
+                this._routeBefores(currentBefores, fragmentUrl, url, matchedIndexes);
             }.bind(this);
         }else{
             next = function(errorCode){
@@ -197,11 +195,11 @@
                 this._followRoute(fragmentUrl, url, matchedIndexes);
             }.bind(this);
         }
-        currentBefore(this._buildRequestObject(fragmentUrl, null, null, true), next);
+        beforeAction(this._buildRequestObject(fragmentUrl, null, null, true), next);
     };
 
     /**
-     * 路由处理程序(可能有多个符合)
+     * 获取匹配的路由地址(可能多个)
      * @param fragmentUrl
      * @private
      */
@@ -227,8 +225,7 @@
         // 存在匹配的路由
         if(matchedIndexes.length > 0){
             if(befores.length > 0){
-                var currentBefore = befores.shift();
-                this._routeBefores(befores, currentBefore, fragmentUrl, url,  matchedIndexes);
+                this._routeBefores(befores, fragmentUrl, url,  matchedIndexes);
             }else{
                 this._followRoute(fragmentUrl, url,  matchedIndexes);
             }
@@ -238,7 +235,7 @@
     };
 
     /**
-     *
+     * 针对指定路由进行处理
      * @param fragmentUrl
      * @param url
      * @param matchedIndexes  ["1", "3"]
@@ -248,7 +245,6 @@
         var index = matchedIndexes.shift(),  // 获取第一个匹配index
             route = this._routes[index],
             match = url.match(route.path),  // ["#/users/lg?uid=211", "lg"]
-            request,
             params = {},
             splat = [];
 
@@ -276,8 +272,7 @@
         }.bind(this);
 
         // 构建request对象
-        request = this._buildRequestObject(fragmentUrl, params, splat, hasNext);
-        route.routeAction(request, next);
+        route.routeAction(this._buildRequestObject(fragmentUrl, params, splat, hasNext), next);
     };
 
     /**
@@ -291,7 +286,7 @@
     Router.prototype._buildRequestObject = function(fragmentUrl, params, splat, hasNext){
         var request = new Request(fragmentUrl);
         request.params = params || {};
-        request.splat = splat || {};
+        request.splat = splat || [];
         request.hasNext = hasNext;
         // 获取查询对象
         fragmentUrl.replace(/([^?&=]+)=([^&]+)/g, function(full, key, value){
